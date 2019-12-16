@@ -14,22 +14,21 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=C,R,W
-from datetime import datetime, timedelta
 import logging
 import pickle as pkl
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from superset import app, cache
-from superset import db
+from superset import app, cache, db
 from superset.connectors.base.models import BaseDatasource
 from superset.connectors.connector_registry import ConnectorRegistry
 from superset.stats_logger import BaseStatsLogger
 from superset.utils import core as utils
 from superset.utils.core import DTTM_ALIAS
+
 from .query_object import QueryObject
 
 config = app.config
@@ -59,8 +58,10 @@ class QueryContext:
         force: bool = False,
         custom_cache_timeout: Optional[int] = None,
     ) -> None:
-        self.datasource = ConnectorRegistry.get_datasource(
-            datasource.get("type"), int(datasource.get("id")), db.session  # noqa: T400
+        self.datasource = ConnectorRegistry.get_datasource(  # type: ignore
+            datasource.get("type"),  # type: ignore
+            int(datasource.get("id")),  # type: ignore
+            db.session,
         )
         self.queries = list(map(lambda query_obj: QueryObject(**query_obj), queries))
 
@@ -114,14 +115,18 @@ class QueryContext:
             "df": df,
         }
 
-    def df_metrics_to_num(self, df: pd.DataFrame, query_object: QueryObject) -> None:
+    def df_metrics_to_num(  # pylint: disable=invalid-name,no-self-use
+        self, df: pd.DataFrame, query_object: QueryObject
+    ) -> None:
         """Converting metrics to numeric when pandas.read_sql cannot"""
         metrics = [metric for metric in query_object.metrics]
         for col, dtype in df.dtypes.items():
             if dtype.type == np.object_ and col in metrics:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    def get_data(self, df: pd.DataFrame) -> List[Dict]:
+    def get_data(  # pylint: disable=invalid-name,no-self-use
+        self, df: pd.DataFrame
+    ) -> List[Dict]:
         return df.to_dict(orient="records")
 
     def get_single_payload(self, query_obj: QueryObject) -> Dict[str, Any]:
@@ -155,7 +160,9 @@ class QueryContext:
             return self.datasource.database.cache_timeout
         return config["CACHE_DEFAULT_TIMEOUT"]
 
-    def get_df_payload(self, query_obj: QueryObject, **kwargs) -> Dict[str, Any]:
+    def get_df_payload(  # pylint: disable=too-many-locals,too-many-statements
+        self, query_obj: QueryObject, **kwargs
+    ) -> Dict[str, Any]:
         """Handles caching around the df payload retrieval"""
         extra_cache_keys = self.datasource.get_extra_cache_keys(query_obj.to_dict())
         cache_key = (
@@ -167,7 +174,7 @@ class QueryContext:
             if query_obj
             else None
         )
-        logging.info("Cache key: {}".format(cache_key))
+        logging.info("Cache key: %s", cache_key)
         is_loaded = False
         stacktrace = None
         df = None
@@ -186,10 +193,10 @@ class QueryContext:
                     query = cache_value["query"]
                     status = utils.QueryStatus.SUCCESS
                     is_loaded = True
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     logging.exception(e)
                     logging.error(
-                        "Error reading cache: " + utils.error_msg_from_exception(e)
+                        "Error reading cache: %s", utils.error_msg_from_exception(e)
                     )
                 logging.info("Serving from cache")
 
@@ -203,7 +210,7 @@ class QueryContext:
                 if status != utils.QueryStatus.FAILED:
                     stats_logger.incr("loaded_from_source")
                     is_loaded = True
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 logging.exception(e)
                 if not error_message:
                     error_message = "{}".format(e)
@@ -216,17 +223,15 @@ class QueryContext:
                     cache_binary = pkl.dumps(cache_value, protocol=pkl.HIGHEST_PROTOCOL)
 
                     logging.info(
-                        "Caching {} chars at key {}".format(
-                            len(cache_binary), cache_key
-                        )
+                        "Caching %d chars at key %s", len(cache_binary), cache_key
                     )
 
                     stats_logger.incr("set_cache_key")
                     cache.set(cache_key, cache_binary, timeout=self.cache_timeout)
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     # cache.set call can fail if the backend is down or if
                     # the key is too large or whatever other reasons
-                    logging.warning("Could not cache key {}".format(cache_key))
+                    logging.warning("Could not cache key %s", cache_key)
                     logging.exception(e)
                     cache.delete(cache_key)
         return {

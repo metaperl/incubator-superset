@@ -1,4 +1,3 @@
-# pylint: disable=C,R,W
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -21,6 +20,7 @@ from flask_appbuilder.security.decorators import has_access
 
 from superset import appbuilder, db
 from superset.models import core as models
+
 from .base import BaseSupersetView
 
 
